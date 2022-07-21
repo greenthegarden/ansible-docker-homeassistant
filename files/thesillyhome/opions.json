@@ -1,0 +1,28 @@
+{
+  "actuactors_id": [
+    "input_boolean.at_home"
+  ],
+  "sensors_id": [
+    "sensor.cpu_speed",
+    "sensor.speedtest_download",
+    "sensor.speedtest_ping",
+    "sensor.speedtest_upload",
+    "sun.sun"
+  ],
+  "db_options": [
+    {
+      "db_password": "homeassistant",
+      "db_username": "homeassistant",
+      "db_host": "homeassistant-db",
+      "db_port": "3306",
+      "db_database": "homeassistant",
+      "db_type": "mariadb"
+    }
+  ],
+  "ha_options": [
+    {
+      "ha_url": "http://homeassistant:8123",
+      "ha_token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJlYmQ5NzU0YWVhNDc0OGRjOWQ3ZmYyMzM5MDNkYmU1MiIsImlhdCI6MTY1ODQwMDgzMywiZXhwIjoxOTczNzYwODMzfQ.T5sYllDshC7lScAeH3JqTL-achpZQOHwJMQ9YDNsNWM"
+    }
+  ]
+}

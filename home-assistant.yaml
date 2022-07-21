@@ -75,7 +75,7 @@
         - homeassistant-db
         - homeassistant
 
-    - name: Create HomeAssistant DB Volume
+    - name: Create Home Assistant DB Volume
       community.docker.docker_volume:
         name: "{{ homeassistant_db_volume }}"
         state: present
@@ -83,7 +83,7 @@
         - homeassistant-db
         - homeassistant
 
-    - name: Check if HomeAssistant DB is running
+    - name: Check if Home Assistant DB is running
       community.docker.docker_container_info:
         name: "{{ homeassistant_db_container_name }}"
       register: homeassistant_db_state
@@ -323,3 +323,79 @@
     #   tags:
     #     - appdaemon
     #     - stable
+
+    ####### THE SILLY HOME SECTION
+
+    # https://github.com/lcmchris/thesillyhome-container/
+
+    - name: Set The Silly Home facts
+      ansible.builtin.set_fact:
+        thesillyhome_image_name: lcmchris1/thesillyhome-container
+        thesillyhome_image_tag: dev
+        thesillyhome_container_name: thesillyhome
+        thesillyhome_container_port: 2300
+        thesillyhome_volume: thesillyhome_config
+      tags:
+        - thesillyhome
+        - homeassistant
+
+    - name: Create The Silly Home Volume
+      community.docker.docker_volume:
+        name: "{{ thesillyhome_volume }}"
+        state: present
+      tags:
+        - thesillyhome
+        - homeassistant
+
+    - name: Check if The Silly Home is running
+      community.docker.docker_container_info:
+        name: "{{ thesillyhome_container_name }}"
+      register: thesillyhome_state
+
+    - block:
+
+        - name: Pull The Silly Home Image
+          community.docker.docker_image:
+            name: "{{ thesillyhome_image_name }}:{{ thesillyhome_image_tag | default('latest') }}"
+            source: pull
+          tags:
+            - thesillyhome
+            - homeassistant
+
+        # docker run --name some-mariadb -e thesillyhome_PASSWORD=mysecretpassword -d mariadb
+        - name: Start The Silly Home
+          community.docker.docker_container:
+            name: "{{ thesillyhome_container_name | default('homeassistant_db') }}"
+            image: "{{ thesillyhome_image_name }}:{{ thesillyhome_image_tag | default('latest') }}"
+            detach: true
+            networks_cli_compatible: true
+            networks:
+              - name: homeassistant-network
+            published_ports:
+              - "{{ thesillyhome_container_port }}:2300"
+            restart: true
+            restart_policy: unless-stopped
+            volumes:
+              - "{{ thesillyhome_volume }}:/thesillyhome_src/data/config/"
+              - /etc/localtime:/etc/localtime:ro
+          register: thesillyhome_register
+          tags:
+            - thesillyhome
+            - homeassistant
+
+        - name: Wait for The Silly Home to accept connections
+          ansible.builtin.wait_for:
+            host: "{{ hostvars[inventory_hostname]['ansible_default_ipv4']['address'] }}"
+            port: "{{ thesillyhome_container_port | default('2300') }}"
+            connect_timeout: 1
+            delay: 10
+            state: started
+            timeout: 30
+          register: thesillyhome_running
+          until: thesillyhome_running is success
+          retries: 10
+          tags:
+            - thesillyhome
+            - homeassistant
+
+      when: not thesillyhome_state.exists
