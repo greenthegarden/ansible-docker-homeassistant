@@ -1,0 +1,325 @@
+---
+- name: Run Home Assistant Stack
+
+  hosts: localhost
+
+  vars:
+
+  pre_tasks:
+
+    - name: Check for dependent python modules
+      community.general.python_requirements_info:
+        dependencies:
+          - docker>=5.0.0
+      tags:
+        - always
+
+    # - name: create configuration directory for user
+    #   ansible.builtin.user:
+    #     name: "{{ ansible_user }}"
+    #     state: present
+    #   register: ansible_user_registered
+    #   tags:
+    #     - always
+    #   when: 0
+
+    - name: Run message
+      ansible.builtin.debug:
+        msg: "Running on host {{ ansible_hostname }} via {{ ansible_default_ipv4.interface }} @ {{ ansible_default_ipv4.address }} as user {{ ansible_user_id }}"
+      tags:
+        - always
+
+  tasks:
+
+    ####### HOMEASSISTANT NETWORK SECTION
+
+    # Based on
+    # https://community.home-assistant.io/t/how-to-run-homeassistant-on-docker-on-its-own-network-instead-of-the-host-network/189315/4
+
+    - name: Set HomeAssistant Network facts
+      ansible.builtin.set_fact:
+        iprange: "192.168.1.240/28"
+        subnet: "192.168.1.1/24"
+        gateway: "192.168.1.1"
+        homeassistant_network_name: homeassistant-network
+
+    - name: Create a HomeAssistant Network
+      community.docker.docker_network:
+        name: "{{ homeassistant_network_name | default('homeassistant_network') }}"
+        internal: false
+
+    - name: create docker macvlan trunked network
+      community.docker.docker_network:
+        driver: macvlan
+        enable_ipv6: no
+        internal: no
+        name: "{{homeassistant_network_name}}"
+        ipam_config:
+        - gateway: "{{gateway}}"
+          iprange: "{{iprange}}"
+          subnet: "{{subnet}}"
+      when: 0
+
+    ####### HOME ASSISTANT DB SECTION
+
+    # https://hub.docker.com/_/mariadb/
+
+    - name: Set Home Assistant DB facts
+      ansible.builtin.set_fact:
+        homeassistant_db_image_name: mariadb
+        homeassistant_db_image_tag: latest
+        homeassistant_db_container_name: homeassistant-db
+        homeassistant_db_container_port: 3306
+        homeassistant_db_volume: homeassistant-db-volume
+      tags:
+        - homeassistant-db
+        - homeassistant
+
+    - name: Create HomeAssistant DB Volume
+      community.docker.docker_volume:
+        name: "{{ homeassistant_db_volume }}"
+        state: present
+      tags:
+        - homeassistant-db
+        - homeassistant
+
+    - name: Check if HomeAssistant DB is running
+      community.docker.docker_container_info:
+        name: "{{ homeassistant_db_container_name }}"
+      register: homeassistant_db_state
+
+    - block:
+
+        - name: Pull Home Assistant DB Image
+          community.docker.docker_image:
+            name: "{{ homeassistant_db_image_name }}:{{ homeassistant_db_image_tag | default('latest') }}"
+            source: pull
+          tags:
+            - homeassistant-db
+            - homeassistant
+
+        # docker run --name some-mariadb -e homeassistant_db_PASSWORD=mysecretpassword -d mariadb
+        - name: Start Home Assistant DB
+          community.docker.docker_container:
+            name: "{{ homeassistant_db_container_name | default('homeassistant_db') }}"
+            image: "{{ homeassistant_db_image_name }}:{{ homeassistant_db_image_tag | default('latest') }}"
+            detach: true
+            env:
+              MYSQL_DATABASE: "homeassistant"
+              MYSQL_USER: "homeassistant"
+              MYSQL_PASSWORD: "homeassistant"
+              MYSQL_ROOT_PASSWORD: "mysqlrootpassword"
+            networks_cli_compatible: true
+            networks:
+              - name: homeassistant-network
+            published_ports:
+              - "{{ homeassistant_db_container_port }}:3306"
+            restart: true
+            restart_policy: unless-stopped
+            volumes:
+              - "{{ homeassistant_db_volume }}:/var/lib/mysql"
+              - /etc/localtime:/etc/localtime:ro
+          register: homeassistant_db_register
+          tags:
+            - homeassistant-db
+            - homeassistant
+
+        - name: homeassistant_db_register debug
+          ansible.builtin.debug:
+            var: homeassistant_db_register
+            verbosity: 2
+
+        - name: Wait for Home Assistant DB to accept connections
+          ansible.builtin.wait_for:
+            # host: "{{ homeassistant_db_register['container']\
+            #   ['NetworkSettings']\
+            #   ['Networks']\
+            #   ['homeassistant-network']\
+            #   ['IPAddress'] }}"
+            host: "{{ hostvars[inventory_hostname]['ansible_default_ipv4']['address'] }}"
+            port: "{{ homeassistant_db_container_port | default('3306') }}"
+            connect_timeout: 1
+            delay: 10
+            state: started
+            timeout: 30
+          register: homeassistant_db_running
+          until: homeassistant_db_running is success
+          retries: 10
+          tags:
+            - homeassistant-db
+            - homeassistant
+
+      when: not homeassistant_db_state.exists
+
+    ###### HOME ASSISTANT SECTION
+
+    - name: Set Home Assistant facts
+      ansible.builtin.set_fact:
+        homeassistant_image_name: homeassistant/home-assistant
+        homeassistant_image_tag: '2022.7'
+        homeassistant_container_name: homeassistant
+        homeassistant_container_port: 8123
+        homeassistant_volume: homeassistant-volume
+      tags:
+        - homeassistant
+
+    - name: Create Home Assistant Volume
+      community.docker.docker_volume:
+        name: "{{ homeassistant_volume }}"
+        state: present
+      tags:
+        - homeassistant
+
+    - name: Check if Home Assistant is running
+      community.docker.docker_container_info:
+        name: "{{ homeassistant_container_name }}"
+      register: homeassistant_state
+
+    - block:
+
+        - name: Pull Home Assistant image
+          community.docker.docker_image:
+            name: "{{ homeassistant_image_name }}:{{ homeassistant_image_tag | default('latest') }}"
+            source: pull
+          tags:
+            - homeassistant
+
+        - name: Define Home Assistant configuration directory
+          ansible.builtin.set_fact:
+            # homeassistant_config_dir: "{{ ansible_user_registered.home }}/{{ homeassistant_container_name }}"
+            homeassistant_config_dir: "/home/{{ ansible_user_id }}/{{ homeassistant_container_name }}"
+          tags:
+            - homeassistant
+
+        - name: Create Home Assistant Configuration Directory
+          ansible.builtin.file:
+            path: "{{ homeassistant_config_dir }}"
+            state: directory
+            mode: '0755'
+
+        - name: Copy Home Assistant configuration
+          ansible.builtin.copy:
+            src: files/home-assistant
+            dest: "{{ homeassistant_config_dir }}"
+            mode: '0755'
+
+        - name: Start Home Assistant
+          community.docker.docker_container:
+            name: "{{ homeassistant_container_name | default('homeassistant') }}"
+            image: "{{ homeassistant_image_name }}:{{ homeassistant_image_tag | default('latest') }}"
+            detach: true
+            env:
+              MYSQL_DATABASE: "homeassistant"
+              MYSQL_HOST: "{{ homeassistant_db_container_name }}"
+              MYSQL_USER: "homeassistant"
+              MYSQL_PASSWORD: "homeassistant"
+            networks_cli_compatible: true
+            networks:
+              - name: "{{ homeassistant_network_name }}"
+                links:
+                  - "{{ homeassistant_db_container_name }}"
+            published_ports:
+              - "{{ homeassistant_container_port }}:8123"
+            restart: true
+            restart_policy: unless-stopped
+            state: started
+            volumes:
+              - "{{ homeassistant_config_dir }}/home-assistant:/config"
+              - /etc/localtime:/etc/localtime:ro
+              - /var/run/docker.sock:/var/run/docker.sock
+          tags:
+            - homeassistant
+
+        - name: Wait for Home Assistant to accept connections
+          ansible.builtin.wait_for:
+            host: "{{ hostvars[inventory_hostname]['ansible_default_ipv4']['address'] }}"
+            port: "{{ homeassistant_container_port | default('8123') }}"
+            connect_timeout: 1
+            delay: 10
+            state: started
+            timeout: 30
+          register: homeassistant_running
+          until: homeassistant_running is success
+          retries: 10
+          tags:
+            - homeassistant
+
+      when: not homeassistant_state.exists
+
+    # ####### APPDAEMON SECTION
+
+    # # docker run --name=appdaemon -d -p 5050:5050 \
+    # # --restart=always \
+    # # -e HA_URL="<your HA_URL value>" \
+    # # -e TOKEN="<your TOKEN value>" \
+    # # -e DASH_URL="http://$HOSTNAME:5050" \
+    # # -v <your_conf_folder>:/conf \
+    # # acockburn/appdaemon:latest
+
+    # - name: Set appdaemon facts
+    #   ansible.builtin.set_fact:
+    #     appdaemon_image_name: acockburn/appdaemon
+    #     appdaemon_image_tag: 4.2.1
+    #     appdaemon_service_name: appdaemon
+    #     appdaemon_service_port: 5050
+    #     appdaemon_homeassistant_url: 'http://home-assistant.localdomain:8123'
+    #   tags:
+    #     - appdaemon
+    #     - stable
+
+    # - name: Pull image
+    #   community.docker.docker_image:
+    #     name: "{{ appdaemon_image_name }}:{{ appdaemon_image_tag | default('latest') }}"
+    #     source: pull
+    #   tags:
+    #     - appdaemon
+    #     - stable
+
+    # - name: Define configuration directory
+    #   ansible.builtin.set_fact:
+    #     # appdaemon_config_dir: "{{ ansible_user_registered }}/{{ homeassistant_container_name }}/appdaemon"
+    #     appdaemon_config_dir: "{{ ansible_user_registered.home }}/appdaemon"
+    #   tags:
+    #     - appdaemon
+    #     - stable
+
+    # - name: Copy configuration
+    #   ansible.builtin.copy:
+    #     src: appdaemon
+    #     dest: "{{ ansible_user_registered.home }}"
+    #   tags:
+    #     - appdaemon
+    #     - stable
+
+    # - name: Run appdaemon
+    #   community.docker.docker_container:
+    #     image: "{{ appdaemon_image_name }}:{{ appdaemon_image_tag | default('latest') }}"
+    #     name: "{{ appdaemon_service_name | default('appdaemon')}}"
+    #     # command: -D DEBUG
+    #     detach: true
+    #     env:
+    #       HA_URL: "{{ appdaemon_homeassistant_url }}"
+    #       TOKEN: 'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJkZTkzNjNiMDYyYjU0MjdhYmQwMDc5ZmI5Y2JjYTJhMiIsImlhdCI6MTY1NDM0Njc3NiwiZXhwIjoxOTY5NzA2Nzc2fQ.GX2ePT9n21SNZhrCfM3ECyfPL5cyJQTVX5LuIM82sEs'
+    #       DASH_URL: 'http://home-assistant.localdomain:5050'
+    #     published_ports:
+    #       - "{{ appdaemon_service_port | default(5050) }}:5050"
+    #     recreate: true
+    #     restart: true
+    #     restart_policy: unless-stopped
+    #     state: started
+    #     user: "{{ ansible_user_uid }}:{{ ansible_user_gid }}"
+    #     volumes:
+    #       - "{{ appdaemon_config_dir }}:/conf"
+    #       - /etc/localtime:/etc/localtime:ro
+    #   tags:
+    #     - appdaemon
+
+    # - name: Wait for appdaemon to start
+    #   ansible.builtin.wait_for:
+    #     host: "{{ host_address }}"
+    #     port: "{{ appdaemon_service_port | default(5050) }}"
+    #     delay: 10
+    #     state: started
+    #   tags:
+    #     - appdaemon
+    #     - stable
