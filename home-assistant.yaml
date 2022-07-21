@@ -113,7 +113,7 @@
             networks:
               - name: homeassistant-network
             published_ports:
-              - "{{ homeassistant_db_container_port }}:3306"
+              - "{{ homeassistant_db_container_port | default(3306) }}:3306"
             restart: true
             restart_policy: unless-stopped
             volumes:
@@ -137,7 +137,7 @@
             #   ['homeassistant-network']\
             #   ['IPAddress'] }}"
             host: "{{ hostvars[inventory_hostname]['ansible_default_ipv4']['address'] }}"
-            port: "{{ homeassistant_db_container_port | default('3306') }}"
+            port: "{{ homeassistant_db_container_port | default(3306) }}"
             connect_timeout: 1
             delay: 10
             state: started
@@ -150,6 +150,90 @@
             - homeassistant
 
       when: not homeassistant_db_state.exists
+
+    ####### HOME ASSISTANT INFLUXDB SECTION
+
+    # https://hub.docker.com/_/mariadb/
+
+    - name: Set Home Assistant InfluxDB facts
+      ansible.builtin.set_fact:
+        homeassistant_influxdb_image_name: influxdb
+        homeassistant_influxdb_image_tag: latest
+        homeassistant_influxdb_container_name: homeassistant-influxdb
+        homeassistant_influxdb_container_port: 8086
+        homeassistant_influxdb_volume: homeassistant-influxdb-volume
+      tags:
+        - homeassistant-influxdb
+        - homeassistant
+
+    - name: Create Home Assistant InfluxDB Volume
+      community.docker.docker_volume:
+        name: "{{ homeassistant_influxdb_volume }}"
+        state: present
+      tags:
+        - homeassistant-influxdb
+        - homeassistant
+
+    - name: Check if Home Assistant InfluxDB is running
+      community.docker.docker_container_info:
+        name: "{{ homeassistant_influxdb_container_name }}"
+      register: homeassistant_influxdb_state
+
+    - block:
+
+        - name: Pull Home Assistant InfluxDB Image
+          community.docker.docker_image:
+            name: "{{ homeassistant_influxdb_image_name }}:{{ homeassistant_influxdb_image_tag | default('latest') }}"
+            source: pull
+          tags:
+            - homeassistant-influxdb
+            - homeassistant
+
+        # docker run --name some-mariadb -e homeassistant_influxdb_PASSWORD=mysecretpassword -d mariadb
+        - name: Start Home Assistant InfluxDB
+          community.docker.docker_container:
+            name: "{{ homeassistant_influxdb_container_name | default('homeassistant_influxdb') }}"
+            image: "{{ homeassistant_influxdb_image_name }}:{{ homeassistant_influxdb_image_tag | default('latest') }}"
+            detach: true
+            env:
+              DOCKER_INFLUXDB_INIT_MODE: setup
+              DOCKER_INFLUXDB_INIT_USERNAME: homeassistant
+              DOCKER_INFLUXDB_INIT_PASSWORD: homeassistant
+              DOCKER_INFLUXDB_INIT_ORG: homeassistant
+              DOCKER_INFLUXDB_INIT_BUCKET: homeassistant
+              DOCKER_INFLUXDB_INIT_RETENTION: 1w
+              DOCKER_INFLUXDB_INIT_ADMIN_TOKEN: homeassistant
+            networks_cli_compatible: true
+            networks:
+              - name: homeassistant-network
+            published_ports:
+              - "{{ homeassistant_influxdb_container_port | default(8086) }}:8086"
+            restart: true
+            restart_policy: unless-stopped
+            volumes:
+              - "{{ homeassistant_influxdb_volume }}:/var/lib/influxdb2"
+              - /etc/localtime:/etc/localtime:ro
+          register: homeassistant_influxdb_register
+          tags:
+            - homeassistant-influxdb
+            - homeassistant
+
+        - name: Wait for Home Assistant InfluxDB to accept connections
+          ansible.builtin.wait_for:
+            host: "{{ hostvars[inventory_hostname]['ansible_default_ipv4']['address'] }}"
+            port: "{{ homeassistant_influxdb_container_port | default(8086) }}"
+            connect_timeout: 1
+            delay: 10
+            state: started
+            timeout: 30
+          register: homeassistant_influxdb_running
+          until: homeassistant_influxdb_running is success
+          retries: 10
+          tags:
+            - homeassistant-influxdb
+            - homeassistant
+
+      when: not homeassistant_influxdb_state.exists
 
     ###### HOME ASSISTANT SECTION
 
@@ -219,7 +303,7 @@
                 links:
                   - "{{ homeassistant_db_container_name }}"
             published_ports:
-              - "{{ homeassistant_container_port }}:8123"
+              - "{{ homeassistant_container_port | default(8123) }}:8123"
             restart: true
             restart_policy: unless-stopped
             state: started
@@ -233,7 +317,7 @@
         - name: Wait for Home Assistant to accept connections
           ansible.builtin.wait_for:
             host: "{{ hostvars[inventory_hostname]['ansible_default_ipv4']['address'] }}"
-            port: "{{ homeassistant_container_port | default('8123') }}"
+            port: "{{ homeassistant_container_port | default(8123) }}"
             connect_timeout: 1
             delay: 10
             state: started
@@ -243,6 +327,58 @@
           retries: 10
           tags:
             - homeassistant
+
+        - name: Set Grafana facts
+          ansible.builtin.set_fact:
+            grafana_container_name: grafana
+            grafana_container_port: 3000
+          tags:
+            - homeassistant
+            - grafana
+
+        - name: Set Grafana API facts
+          ansible.builtin.set_fact:
+            grafana_instance: "{{ grafana_container_name | default('grafana') }}"
+            # Use domain name here as Grafana is running on a different Docker network
+            grafana_api_url: "http://{{ ansible_default_ipv4.address }}:{{ grafana_container_port }}"
+            grafana_security: {admin_user: admin, admin_password: "monitoring"}
+            grafana_use_provisioning: false  # will use API
+          tags:
+            - homeassistant
+            - grafana
+
+        - name: Check if Grafana is running
+          community.docker.docker_container_info:
+            name: "{{ grafana_container_name }}"
+          register: grafana_state
+          tags:
+            - homeassistant
+            - grafana
+
+        - name: Create Grafana dashboard
+          community.grafana.grafana_dashboard:
+            grafana_url: "{{ grafana_api_url }}"
+            # grafana_api_key: "{{ grafana_api_key }}"
+            grafana_user: "{{ grafana_security.admin_user }}"
+            grafana_password: "{{ grafana_security.admin_password }}"
+            # folder: General
+            dashboard_url: "https://grafana.com/api/dashboards/{{ item.dashboard_id }}/revisions/{{ item.dashboard_revision }}/download"
+          vars:
+            grafana_dashboards:
+              # Home Assistant System by goyalankit
+              # https://grafana.com/grafana/dashboards/15832
+              - dashboard_id: '15832'
+                dashboard_revision: '2'
+                datasource: 'InfluxDB'
+              # Home Energy Usage v2 by afreels
+              # https://grafana.com/grafana/dashboards/13950
+              - dashboard_id: '13950'
+                dashboard_revision: '3'
+                datasource: 'Prometheus'
+          with_items: "{{ grafana_dashboards }}"
+          tags:
+            - homeassistant
+            - grafana
 
       when: not homeassistant_state.exists
 
@@ -362,6 +498,8 @@
             - thesillyhome
             - homeassistant
 
+
+
         # docker run --name some-mariadb -e thesillyhome_PASSWORD=mysecretpassword -d mariadb
         - name: Start The Silly Home
           community.docker.docker_container:
@@ -372,7 +510,7 @@
             networks:
               - name: homeassistant-network
             published_ports:
-              - "{{ thesillyhome_container_port }}:2300"
+              - "{{ thesillyhome_container_port | default(2300) }}:2300"
             restart: true
             restart_policy: unless-stopped
             volumes:
@@ -386,7 +524,7 @@
         - name: Wait for The Silly Home to accept connections
           ansible.builtin.wait_for:
             host: "{{ hostvars[inventory_hostname]['ansible_default_ipv4']['address'] }}"
-            port: "{{ thesillyhome_container_port | default('2300') }}"
+            port: "{{ thesillyhome_container_port | default(2300) }}"
             connect_timeout: 1
             delay: 10
             state: started

@@ -1,13 +1,20 @@
 {
   "actuactors_id": [
-    "input_boolean.at_home"
+    "input_boolean.at_home",
+    "switch.relay_1",
+    "switch.relay_1_2",
+    "switch.relay_2",
+    "switch.relay_2_2",
+    "switch.relay_3",
+    "switch.relay_4"
   ],
   "sensors_id": [
     "sensor.cpu_speed",
     "sensor.speedtest_download",
     "sensor.speedtest_ping",
     "sensor.speedtest_upload",
-    "sun.sun"
+    "sun.sun",
+    "sensor.solar_current"
   ],
   "db_options": [
     {

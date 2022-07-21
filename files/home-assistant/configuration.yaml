@@ -70,34 +70,37 @@ frontend:
         dark:
           secondary-text-color: slategray
 
-# # InfluxDB
-# # https://www.home-assistant.io/integrations/influxdb/
-# influxdb:
-#   api_version: 2
-#   ssl: false
-#   host: 192.168.1.186
-#   port: 8086
-#   token: homeassistant
-#   organization: homeassistant
-#   bucket: homeassistant
-#   tags:
-#     source: ha
-#   tags_attributes:
-#     - friendly_name
-#   default_measurement: units
-#   # exclude:
-#   #   entities:
-#   #      - entity.id1
-#   #      - entity.id2
-#   #   domains:
-#   #      - automation
-#   # include:
-#   #   entities:
-#   #      - entity.id3
-#   #      - entity.id4
-#   include:
-#     entities: !include_dir_merge_list influxdb
-
+# InfluxDB
+# Transfer state changes to an external InfluxDB database
+# https://www.home-assistant.io/integrations/influxdb/
+influxdb:
+  api_version: 2
+  host: homeassistant-influxdb
+  port: 8086
+  ssl: false
+  token: homeassistant
+  organization: homeassistant
+  bucket: homeassistant
+  tags:
+    source: ha
+  tags_attributes:
+    - friendly_name
+  default_measurement: units
+  exclude:
+    domains:
+      - persistent_notification
+      - person
+  #   entities:
+  #      - entity.id1
+  #      - entity.id2
+  include:
+    domains:
+      - sensor
+      - binary_sensor
+      - sun
+  #   entities:
+  #      - entity.id1
+  #      - entity.id2       
 
 # Prometheus
 # Exposes metrics in format for Prometheus
@@ -124,7 +127,6 @@ recorder:
   exclude:
     entities:
       - person.homeassistant
-
 
 automation: !include automations.yaml
 script: !include scripts.yaml
