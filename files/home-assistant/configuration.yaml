@@ -74,18 +74,17 @@ frontend:
 # Transfer state changes to an external InfluxDB database
 # https://www.home-assistant.io/integrations/influxdb/
 influxdb:
-  api_version: 2
   host: homeassistant-influxdb
   port: 8086
+  database: homeassistant
+  username: homeassistant
+  password: homeassistant
   ssl: false
-  token: homeassistant
-  organization: homeassistant
-  bucket: homeassistant
+  verify_ssl: false
+  max_retries: 3
+  default_measurement: state
   tags:
     source: ha
-  tags_attributes:
-    - friendly_name
-  default_measurement: units
   exclude:
     domains:
       - persistent_notification
@@ -97,6 +96,7 @@ influxdb:
     domains:
       - sensor
       - binary_sensor
+      - switch
       - sun
   #   entities:
   #      - entity.id1

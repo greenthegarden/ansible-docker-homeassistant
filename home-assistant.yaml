@@ -158,7 +158,7 @@
     - name: Set Home Assistant InfluxDB facts
       ansible.builtin.set_fact:
         homeassistant_influxdb_image_name: influxdb
-        homeassistant_influxdb_image_tag: latest
+        homeassistant_influxdb_image_tag: 1.8
         homeassistant_influxdb_container_name: homeassistant-influxdb
         homeassistant_influxdb_container_port: 8086
         homeassistant_influxdb_volume: homeassistant-influxdb-volume
@@ -196,13 +196,11 @@
             image: "{{ homeassistant_influxdb_image_name }}:{{ homeassistant_influxdb_image_tag | default('latest') }}"
             detach: true
             env:
-              DOCKER_INFLUXDB_INIT_MODE: setup
-              DOCKER_INFLUXDB_INIT_USERNAME: homeassistant
-              DOCKER_INFLUXDB_INIT_PASSWORD: homeassistant
-              DOCKER_INFLUXDB_INIT_ORG: homeassistant
-              DOCKER_INFLUXDB_INIT_BUCKET: homeassistant
-              DOCKER_INFLUXDB_INIT_RETENTION: 1w
-              DOCKER_INFLUXDB_INIT_ADMIN_TOKEN: homeassistant
+              INFLUXDB_DB: homeassistant
+              INFLUXDB_ADMIN_USER: homeassistant
+              INFLUXDB_ADMIN_PASSWORD: homeassistant
+              INFLUXDB_READ_USER: homeassistant
+              INFLUXDB_READ_PASSWORD: homeassistant
             networks_cli_compatible: true
             networks:
               - name: homeassistant-network
@@ -211,7 +209,7 @@
             restart: true
             restart_policy: unless-stopped
             volumes:
-              - "{{ homeassistant_influxdb_volume }}:/var/lib/influxdb2"
+              - "{{ homeassistant_influxdb_volume }}:/var/lib/influxdb"
               - /etc/localtime:/etc/localtime:ro
           register: homeassistant_influxdb_register
           tags:
@@ -232,6 +230,64 @@
           tags:
             - homeassistant-influxdb
             - homeassistant
+
+        - name: Set Grafana facts
+          ansible.builtin.set_fact:
+            grafana_container_name: grafana
+            grafana_container_port: 3000
+          tags:
+            - homeassistant-influxdb
+            - homeassistant
+            - grafana
+
+        - name: Set Grafana API facts
+          ansible.builtin.set_fact:
+            grafana_instance: "{{ grafana_container_name | default('grafana') }}"
+            # Use domain name here as Grafana is running on a different Docker network
+            grafana_api_url: "http://{{ ansible_default_ipv4.address }}:{{ grafana_container_port }}"
+            grafana_security: {admin_user: admin, admin_password: "monitoring"}
+            grafana_use_provisioning: false  # will use API
+          tags:
+            - homeassistant-influxdb
+            - homeassistant
+            - grafana
+
+        - name: Check if Grafana is running
+          community.docker.docker_container_info:
+            name: "{{ grafana_container_name }}"
+          register: grafana_state
+          tags:
+            - homeassistant-influxdb
+            - homeassistant
+            - grafana
+
+        - name: Create Grafana datasources
+          community.grafana.grafana_datasource:
+            name: "{{ item.name }}"
+            grafana_url: "{{ grafana_api_url }}"
+            grafana_user: "{{ grafana_security.admin_user }}"
+            grafana_password: "{{ grafana_security.admin_password }}"
+            org_id: "1"
+            ds_type: "{{ item.type }}"
+            ds_url: "{{ item.url }}"
+            database: homeassistant
+            access: "{{ item.access }}"
+            tls_skip_verify: true
+            state: present
+          with_items: "{{ grafana_datasources }}"
+          vars:
+            grafana_datasources:
+              - name: InfluxDB
+                type: influxdb
+                access: proxy
+                url: "http://{{ ansible_default_ipv4.address }}:{{ homeassistant_influxdb_container_port | default(8086) }}"
+                user: homeassistant
+                basic_auth_user: homeassistant
+                basic_auth_password: homeassistant
+          tags:
+            - homeassistant-influxdb
+            - homeassistant
+            - grafana
 
       when: not homeassistant_influxdb_state.exists
 
@@ -275,7 +331,7 @@
           tags:
             - homeassistant
 
-        - name: Create Home Assistant Configuration Directory
+        - name: Create Home Assistant configuration directory
           ansible.builtin.file:
             path: "{{ homeassistant_config_dir }}"
             state: directory
@@ -498,7 +554,24 @@
             - thesillyhome
             - homeassistant
 
+        - name: Define The Silly Home configuration directory
+          ansible.builtin.set_fact:
+            # homeassistant_config_dir: "{{ ansible_user_registered.home }}/{{ homeassistant_container_name }}"
+            thesillyhome_config_dir: "/home/{{ ansible_user_id }}/{{ thesillyhome_container_name }}"
+          tags:
+            - homeassistant
 
+        - name: Create The Silly Home configuration directory
+          ansible.builtin.file:
+            path: "{{ thesillyhome_config_dir }}"
+            state: directory
+            mode: '0755'
+
+        - name: Copy The Silly Home configuration
+          ansible.builtin.copy:
+            src: files/thesillyhome/options.json
+            dest: "{{ thesillyhome_config_dir }}/options.json"
+            mode: '0755'
 
         # docker run --name some-mariadb -e thesillyhome_PASSWORD=mysecretpassword -d mariadb
         - name: Start The Silly Home
@@ -514,7 +587,8 @@
             restart: true
             restart_policy: unless-stopped
             volumes:
-              - "{{ thesillyhome_volume }}:/thesillyhome_src/data/config/"
+              - "{{ thesillyhome_volume }}:/thesillyhome_src/data/"
+              - "{{ thesillyhome_config_dir }}/options.json:/thesillyhome_src/data/config/options.json"
               - /etc/localtime:/etc/localtime:ro
           register: thesillyhome_register
           tags:
