@@ -527,6 +527,7 @@
         thesillyhome_container_name: thesillyhome
         thesillyhome_container_port: 2300
         thesillyhome_volume: thesillyhome_config
+        thesillyhome_conf_mount: false
       tags:
         - thesillyhome
         - homeassistant
@@ -543,6 +544,9 @@
       community.docker.docker_container_info:
         name: "{{ thesillyhome_container_name }}"
       register: thesillyhome_state
+      tags:
+        - thesillyhome
+        - homeassistant
 
     - block:
 
@@ -554,30 +558,60 @@
             - thesillyhome
             - homeassistant
 
-        - name: Define The Silly Home configuration directory
-          ansible.builtin.set_fact:
-            # homeassistant_config_dir: "{{ ansible_user_registered.home }}/{{ homeassistant_container_name }}"
-            thesillyhome_config_dir: "/home/{{ ansible_user_id }}/{{ thesillyhome_container_name }}"
+        - block:
+
+            - name: Define The Silly Home configuration directory
+              ansible.builtin.set_fact:
+                # homeassistant_config_dir: "{{ ansible_user_registered.home }}/{{ homeassistant_container_name }}"
+                thesillyhome_config_dir: "/home/{{ ansible_user_id }}/{{ thesillyhome_container_name }}"
+              tags:
+                - thesillyhome
+                - homeassistant
+
+            - name: Create The Silly Home configuration directory
+              ansible.builtin.file:
+                path: "{{ thesillyhome_config_dir }}"
+                state: directory
+                mode: '0755'
+              tags:
+                - thesillyhome
+                - homeassistant
+
+            - name: Copy The Silly Home configuration
+              ansible.builtin.copy:
+                src: files/thesillyhome/options.json
+                dest: "{{ thesillyhome_config_dir }}/options.json"
+                mode: '0755'
+              tags:
+                - thesillyhome
+                - homeassistant
+          
+          when: thesillyhome_conf_mount
+
+        - name: Back configuration into The Silly Home image
+          ansible.builtin.copy:
+            src: files/thesillyhome
+            dest: /tmp
           tags:
+            - thesillyhome
             - homeassistant
 
-        - name: Create The Silly Home configuration directory
-          ansible.builtin.file:
-            path: "{{ thesillyhome_config_dir }}"
-            state: directory
-            mode: '0755'
-
-        - name: Copy The Silly Home configuration
-          ansible.builtin.copy:
-            src: files/thesillyhome/options.json
-            dest: "{{ thesillyhome_config_dir }}/options.json"
-            mode: '0755'
+        - name: Build a The Silly Home image with configuration
+          community.docker.docker_image:
+            build:
+              path: /tmp/thesillyhome
+            name: "{{ thesillyhome_image_name }}"
+            tag: config
+            source: build
+          tags:
+            - thesillyhome
+            - homeassistant
 
         # docker run --name some-mariadb -e thesillyhome_PASSWORD=mysecretpassword -d mariadb
         - name: Start The Silly Home
           community.docker.docker_container:
             name: "{{ thesillyhome_container_name | default('homeassistant_db') }}"
-            image: "{{ thesillyhome_image_name }}:{{ thesillyhome_image_tag | default('latest') }}"
+            image: "{{ thesillyhome_image_name }}:config"
             detach: true
             networks_cli_compatible: true
             networks:
@@ -588,7 +622,7 @@
             restart_policy: unless-stopped
             volumes:
               - "{{ thesillyhome_volume }}:/thesillyhome_src/data/"
-              - "{{ thesillyhome_config_dir }}/options.json:/thesillyhome_src/data/config/options.json"
+              # - "{{ thesillyhome_config_dir }}/options.json:/thesillyhome_src/data/config/options.json"
               - /etc/localtime:/etc/localtime:ro
           register: thesillyhome_register
           tags:
