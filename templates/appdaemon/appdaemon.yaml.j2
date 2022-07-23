@@ -1,0 +1,17 @@
+---
+appdaemon:
+  threads: 10
+  latitude: {{ homeassistant_configuration_latitude }}
+  longitude: {{ homeassistant_configuration_longitude }}
+  elevation: {{ homeassistant_configuration_elevation }}
+  time_zone: {{ homeassistant_configuration_time_zone }}
+  plugins:
+    HASS:
+      type: hass
+      ha_url: {{ appdaemon_homeassistant_url }}
+      token: {{ appdaemon_homeassistant_token }}
+http:
+  url: {{ appdeamon_dash_url }}
+admin:
+api:
+hadashboard:

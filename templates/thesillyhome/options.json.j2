@@ -1,0 +1,35 @@
+{
+  "actuactors_id": [
+    "input_boolean.at_home",
+    "switch.relay_1",
+    "switch.relay_1_2",
+    "switch.relay_2",
+    "switch.relay_2_2",
+    "switch.relay_3",
+    "switch.relay_4"
+  ],
+  "sensors_id": [
+    "sensor.cpu_speed",
+    "sensor.speedtest_download",
+    "sensor.speedtest_ping",
+    "sensor.speedtest_upload",
+    "sun.sun",
+    "sensor.solar_current"
+  ],
+  "db_options": [
+    {
+      "db_host": "{{ homeassistant_db_container_name }}",
+      "db_port": "{{ homeassistant_db_container_port }}",
+      "db_database": "{{ homeassistant_db_mysql_database }}",
+      "db_type": "mariadb",
+      "db_username": "{{ homeassistant_db_mysql_user }}",
+      "db_password": "{{ homeassistant_db_mysql_password }}"
+    }
+  ],
+  "ha_options": [
+    {
+      "ha_url": "{{ thesillyhome_homeassistant_url }}",
+      "ha_token": "{{ thesillyhome_homeassistant_token }}"
+    }
+  ]
+}

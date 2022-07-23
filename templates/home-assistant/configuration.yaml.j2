@@ -7,20 +7,20 @@
 # homeassistant: !include homeassistant.yaml
 homeassistant:
   # Name of the location where Home Assistant is running
-  name: Home
+  name: {{ homeassistant_configuration_name }}
 
   # Location required to calculate the time the sun rises and sets
-  latitude: 51.056145
-  longitude: 2.736947
+  latitude: {{ homeassistant_configuration_latitude }}
+  longitude: {{ homeassistant_configuration_longitude }}
   # Impacts weather/sunrise data (altitude above sea level in meters)
-  elevation: 45
+  elevation: {{ homeassistant_configuration_elevation }}
 
   # metric for Metric, imperial for Imperial
-  unit_system: metric
+  unit_system: {{ homeassistant_configuration_unit_system }}
   # Select timezone from http://en.wikipedia.org/wiki/List_of_tz_database_time_zones
-  time_zone: Europe/London
+  time_zone: {{ homeassistant_configuration_time_zone }}
   # Select currency from https://en.wikipedia.org/wiki/ISO_4217#Active_codes
-  currency: GBP
+  currency: {{ homeassistant_configuration_currency }}
 
   # Authenticated Providers
   # https://www.home-assistant.io/docs/authentication/providers/
@@ -52,33 +52,16 @@ config:
 # Official frontend to control Home Assistant.
 # https://www.home-assistant.io/integrations/frontend/
 frontend:
-  themes:
-    happy:
-      primary-color: pink
-      text-primary-color: purple
-      mdc-theme-primary: plum
-    sad:
-      primary-color: steelblue
-      modes:
-        dark:
-          secondary-text-color: slategray
-    day_and_night:
-      primary-color: coral
-      modes:
-        light:
-          secondary-text-color: olive
-        dark:
-          secondary-text-color: slategray
 
 # InfluxDB
 # Transfer state changes to an external InfluxDB database
 # https://www.home-assistant.io/integrations/influxdb/
 influxdb:
-  host: homeassistant-influxdb
-  port: 8086
-  database: homeassistant
-  username: homeassistant
-  password: homeassistant
+  host: {{ homeassistant_influxdb_container_name }}
+  port: {{ homeassistant_influxdb_container_port }}
+  database: {{ homeassistant_influxdb_db }}
+  username: {{ homeassistant_influxdb_read_user }}
+  password: {{ homeassistant_influxdb_read_password }}
   ssl: false
   verify_ssl: false
   max_retries: 3
@@ -119,7 +102,7 @@ recorder:
   # The number of days of history to keep in the recorder database
   # purge_keep_days: 2
   # auto_purge: true
-  db_url: mysql://homeassistant:homeassistant@homeassistant-db:3306/homeassistant?charset=utf8mb4
+  db_url: mysql://{{ homeassistant_db_mysql_user }}:{{ homeassistant_db_mysql_password }}@{{ homeassistant_db_container_name }}:{{ homeassistant_db_container_port }}/{{ homeassistant_db_mysql_database }}?charset=utf8mb4
   # include:
   #   # entities: !include_dir_merge_list ../influxdb
   #   domains:

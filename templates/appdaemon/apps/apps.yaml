@@ -2,9 +2,3 @@
 hello_world:
   module: hello
   class: HelloWorld
-
-asx_sensor:
-  module: asx_sensor
-  class: Get_ASX_info
-  TICKER: "EDV,TLS,WOW"
-  TICK_FLAG: "input_boolean.check_asx_info"

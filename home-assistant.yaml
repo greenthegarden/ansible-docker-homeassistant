@@ -76,6 +76,17 @@
         - homeassistant-db
         - homeassistant
 
+    - name: Set Home Assistant DB database facts
+      ansible.builtin.set_fact:
+        homeassistant_db_mysql_database: homeassistant
+        homeassistant_db_mysql_user: homeassistant
+        homeassistant_db_mysql_password: homeassistant
+        homeassistant_db_root_password: mysqlrootpassword
+      tags:
+        - mariadb
+        - homeassistant-db
+        - homeassistant
+
     - name: Create Home Assistant DB volume
       community.docker.docker_volume:
         name: "{{ homeassistant_db_volume }}"
@@ -112,10 +123,10 @@
             image: "{{ homeassistant_db_image_name }}:{{ homeassistant_db_image_tag | default('latest') }}"
             detach: true
             env:
-              MYSQL_DATABASE: "homeassistant"
-              MYSQL_USER: "homeassistant"
-              MYSQL_PASSWORD: "homeassistant"
-              MYSQL_ROOT_PASSWORD: "mysqlrootpassword"
+              MYSQL_DATABASE: "{{ homeassistant_db_mysql_database }}"
+              MYSQL_USER: "{{ homeassistant_db_mysql_user }}"
+              MYSQL_PASSWORD: "{{ homeassistant_db_mysql_password }}"
+              MYSQL_ROOT_PASSWORD: "{{ homeassistant_db_root_password }}"
             networks_cli_compatible: true
             networks:
               - name: "{{ homeassistant_network_name }}"
@@ -170,7 +181,18 @@
         - homeassistant-influxdb
         - homeassistant
 
-    - name: Create Home Assistant InfluxDB volu'lme
+    - name: Set Home Assistant InfluxDB Database facts
+      ansible.builtin.set_fact:
+        homeassistant_influxdb_db: homeassistant
+        homeassistant_influxdb_admin_user: homeassistant
+        homeassistant_influxdb_admin_password: homeassistant
+        homeassistant_influxdb_read_user: homeassistant
+        homeassistant_influxdb_read_password: homeassistant
+      tags:
+        - homeassistant-influxdb
+        - homeassistant
+
+    - name: Create Home Assistant InfluxDB volume
       community.docker.docker_volume:
         name: "{{ homeassistant_influxdb_volume }}"
         state: present
@@ -200,11 +222,11 @@
             image: "{{ homeassistant_influxdb_image_name }}:{{ homeassistant_influxdb_image_tag | default('latest') }}"
             detach: true
             env:
-              INFLUXDB_DB: homeassistant
-              INFLUXDB_ADMIN_USER: homeassistant
-              INFLUXDB_ADMIN_PASSWORD: homeassistant
-              INFLUXDB_READ_USER: homeassistant
-              INFLUXDB_READ_PASSWORD: homeassistant
+              INFLUXDB_DB: "{{ homeassistant_influxdb_db }}"
+              INFLUXDB_ADMIN_USER: "{{ homeassistant_influxdb_admin_user }}"
+              INFLUXDB_ADMIN_PASSWORD: "{{ homeassistant_influxdb_admin_password }}"
+              INFLUXDB_READ_USER: "{{ homeassistant_influxdb_read_user }}"
+              INFLUXDB_READ_PASSWORD: "{{ homeassistant_influxdb_read_password }}"
             networks_cli_compatible: true
             networks:
               - name: homeassistant-network
@@ -274,7 +296,7 @@
             org_id: "1"
             ds_type: "{{ item.type }}"
             ds_url: "{{ item.url }}"
-            database: homeassistant
+            database: "{{ homeassistant_influxdb_db }}"
             access: "{{ item.access }}"
             tls_skip_verify: true
             state: present
@@ -285,9 +307,9 @@
                 type: influxdb
                 access: proxy
                 url: "http://{{ ansible_default_ipv4.address }}:{{ homeassistant_influxdb_container_port | default(8086) }}"
-                user: homeassistant
-                basic_auth_user: homeassistant
-                basic_auth_password: homeassistant
+                user: "{{ homeassistant_influxdb_read_user }}"
+                basic_auth_user: "{{ homeassistant_influxdb_read_user }}"
+                basic_auth_password: "{{ homeassistant_influxdb_read_password }}"
           tags:
             - homeassistant-influxdb
             - homeassistant
@@ -304,6 +326,18 @@
         homeassistant_container_name: homeassistant
         homeassistant_container_port: 8123
         homeassistant_volume: homeassistant-volume
+      tags:
+        - homeassistant
+
+    - name: Set Home Assistant Configuration facts
+      ansible.builtin.set_fact:
+        homeassistant_configuration_name: Home
+        homeassistant_configuration_latitude: 51.056145
+        homeassistant_configuration_longitude: 2.736947
+        homeassistant_configuration_elevation: 45
+        homeassistant_configuration_unit_system: metric
+        homeassistant_configuration_time_zone: Europe/London
+        homeassistant_configuration_currency: GBP
       tags:
         - homeassistant
 
@@ -341,9 +375,9 @@
             state: directory
             mode: '0755'
 
-        - name: Copy Home Assistant configuration
-          ansible.builtin.copy:
-            src: files/home-assistant
+        - name: Create Home Assistant configuration
+          ansible.builtin.template:
+            src: templates/home-assistant
             dest: "{{ homeassistant_config_dir }}"
             mode: '0755'
 
@@ -353,10 +387,10 @@
             image: "{{ homeassistant_image_name }}:{{ homeassistant_image_tag | default('latest') }}"
             detach: true
             env:
-              MYSQL_DATABASE: "homeassistant"
-              MYSQL_HOST: "{{ homeassistant_db_container_name }}"
-              MYSQL_USER: "homeassistant"
-              MYSQL_PASSWORD: "homeassistant"
+              MYSQL_HOST: "{{ homeassistant_db_container_name | default('homeassistant') }}"
+              MYSQL_DATABASE: "{{ homeassistant_db_mysql_database | default('homeassistant') }}"
+              MYSQL_USER: "{{ homeassistant_db_mysql_user | default('homeassistant') }}"
+              MYSQL_PASSWORD: "{{ homeassistant_db_mysql_password | default('homeassistant') }}"
             networks_cli_compatible: true
             networks:
               - name: "{{ homeassistant_network_name }}"
@@ -452,13 +486,18 @@
         appdaemon_image_tag: 4.2.1
         appdaemon_container_name: appdaemon
         appdaemon_container_port: 5050
-        appdaemon_homeassistant_url: 'http://home-assistant:8123'
+      tags:
+        - appdaemon
+
+    - name: Set AppDaemon Dash facts
+      ansible.builtin.set_fact:
+        appdeamon_dash_url: "http://{{ hostvars[inventory_hostname]['ansible_default_ipv4']['address'] }}:{{ appdaemon_container_port }}"
       tags:
         - appdaemon
 
     - name: Set AppDaemon Home Assistant facts
       ansible.builtin.set_fact:
-        appdaemon_homeassistant_url: 'http://home-assistant:8123'
+        appdaemon_homeassistant_url: "http://{{ homeassistant_container_name }}:{{ homeassistant_container_port }}"
         appdaemon_homeassistant_token: 'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJkZTkzNjNiMDYyYjU0MjdhYmQwMDc5ZmI5Y2JjYTJhMiIsImlhdCI6MTY1NDM0Njc3NiwiZXhwIjoxOTY5NzA2Nzc2fQ.GX2ePT9n21SNZhrCfM3ECyfPL5cyJQTVX5LuIM82sEs'
       tags:
         - appdaemon
@@ -482,11 +521,11 @@
       - name: Define AppDaemon configuration directory
         ansible.builtin.set_fact:
           # appdaemon_config_dir: "{{ ansible_user_registered.home }}/appdaemon"
-          appdaemon_config_dir: "/home/{{ ansible_user_id }}"
+          appdaemon_config_dir: "/home/{{ ansible_user_id }}/{{ appdaemon_container_name }}"
         tags:
           - appdaemon
 
-      - name: Copy AppDaemon configuration
+      - name: Create AppDaemon configuration
         ansible.builtin.copy:
           src: appdaemon
           dest: "{{ appdaemon_config_dir }}"
@@ -510,7 +549,7 @@
           env:
             HA_URL: "{{ appdaemon_homeassistant_url }}"
             TOKEN: "{{ appdaemon_homeassistant_token }}"
-            DASH_URL: "http://{{ hostvars[inventory_hostname]['ansible_default_ipv4']['address'] }}:{{ appdaemon_container_port }}"
+            DASH_URL: "{{ appdeamon_dash_url }}"
           networks_cli_compatible: true
           networks:
             - name: "{{ homeassistant_network_name }}"
@@ -646,6 +685,13 @@
       tags:
         - thesillyhome
         - homeassistant
+
+    - name: Set The Silly Home Home Assistant facts
+      ansible.builtin.set_fact:
+        thesillyhome_homeassistant_url: "http://{{ homeassistant_container_name }}:{{ homeassistant_container_port }}"
+        thesillyhome_homeassistant_token: 'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJlYmQ5NzU0YWVhNDc0OGRjOWQ3ZmYyMzM5MDNkYmU1MiIsImlhdCI6MTY1ODQwMDgzMywiZXhwIjoxOTczNzYwODMzfQ.T5sYllDshC7lScAeH3JqTL-achpZQOHwJMQ9YDNsNWM'
+      tags:
+        - appdaemon
 
     - name: Create The Silly Home Volume
       community.docker.docker_volume:
