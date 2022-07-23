@@ -7,20 +7,20 @@
 # homeassistant: !include homeassistant.yaml
 homeassistant:
   # Name of the location where Home Assistant is running
-  name: {{ homeassistant_configuration_name }}
+  name: {{ homeassistant_configuration.name }}
 
   # Location required to calculate the time the sun rises and sets
-  latitude: {{ homeassistant_configuration_latitude }}
-  longitude: {{ homeassistant_configuration_longitude }}
+  latitude: {{ homeassistant_configuration.latitude }}
+  longitude: {{ homeassistant_configuration.longitude }}
   # Impacts weather/sunrise data (altitude above sea level in meters)
-  elevation: {{ homeassistant_configuration_elevation }}
+  elevation: {{ homeassistant_configuration.elevation }}
 
   # metric for Metric, imperial for Imperial
-  unit_system: {{ homeassistant_configuration_unit_system }}
+  unit_system: {{ homeassistant_configuration.unit_system }}
   # Select timezone from http://en.wikipedia.org/wiki/List_of_tz_database_time_zones
-  time_zone: {{ homeassistant_configuration_time_zone }}
+  time_zone: {{ homeassistant_configuration.time_zone }}
   # Select currency from https://en.wikipedia.org/wiki/ISO_4217#Active_codes
-  currency: {{ homeassistant_configuration_currency }}
+  currency: {{ homeassistant_configuration.currency }}
 
   # Authenticated Providers
   # https://www.home-assistant.io/docs/authentication/providers/
@@ -39,6 +39,11 @@ homeassistant:
 # https://www.home-assistant.io/integrations/default_config/
 default_config:
 
+# Home Assistant API
+# Exposes a RESTful API and to interaction with a Home Assistant instance that is running headless.
+# https://www.home-assistant.io/integrations/api/
+api:
+
 # Enables configuration UI
 # https://www.home-assistant.io/integrations/config/
 config:
@@ -52,6 +57,12 @@ config:
 # Official frontend to control Home Assistant.
 # https://www.home-assistant.io/integrations/frontend/
 frontend:
+
+# HTTP
+# The http integration serves all files and data required for the Home Assistant frontend.
+# Only needs to be added if required to change any of the default settings
+# https://www.home-assistant.io/integrations/http/
+http:
 
 # InfluxDB
 # Transfer state changes to an external InfluxDB database
