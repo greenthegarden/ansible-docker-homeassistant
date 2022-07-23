@@ -11,6 +11,16 @@
       community.general.python_requirements_info:
         dependencies:
           - docker>=5.0.0
+          - python-consul
+      register: python_requirements
+      tags:
+        - always
+
+    - name: Ensure required python modules are present
+      ansible.builtin.assert:
+        that:
+          - python_requirements.not_found | length == 0
+        fail_msg: "Python modules not found"
       tags:
         - always
 
@@ -30,6 +40,72 @@
         - always
 
   tasks:
+
+    ####### HOMEASSISTANT CONFIGURATION SECTION
+
+    # - name: Set Home Assistant Configuration facts
+    #   ansible.builtin.set_fact:
+    #     homeassistant_configuration_name: Home
+    #     homeassistant_configuration_latitude: 51.056145
+    #     homeassistant_configuration_longitude: 2.736947
+    #     homeassistant_configuration_elevation: 45
+    #     homeassistant_configuration_unit_system: metric
+    #     homeassistant_configuration_time_zone: Europe/London
+    #     homeassistant_configuration_currency: GBP
+    #   tags:
+    #     - homeassistant
+
+    - name: Set Home Assistant Consul facts
+      ansible.builtin.set_fact:
+        homeassistant_consul_host: "{{ hostvars[inventory_hostname]['ansible_default_ipv4']['address'] }}"
+      tags:
+        - homeassistant
+        - configuration
+
+    # - name: Add or update Home Assistant configuration in the key/value store
+    #   community.general.consul_kv:
+    #     host: "{{ homeassistant_consul_host }}"
+    #     key: "homeassistant/{{ item.key }}"
+    #     value: "{{ item.value }}"
+    #   with_items:
+    #     - {key: name, value: Home}
+    #     - {key: latitude, value: 51.056145}
+    #     - {key: longitude, value: 2.736947}
+    #     - {key: elevation, value: 45}
+    #     - {key: unit_system, value: metric}
+    #     - {key: time_zone, value: Europe/London}
+    #     - {key: currency, value: GBP}
+    #   tags:
+    #     - homeassistant
+    #     - configuration
+
+    - name: Retrieve a value from the key/value store
+      community.general.consul_kv:
+        key: homeassistant/config
+      register: retrieved_key
+      tags:
+        - homeassistant
+        - configuration
+
+    - name: Debug
+      debug:
+        var: retrieved_key
+      tags:
+        - homeassistant
+        - configuration
+
+    - name: Config dict
+      ansible.builtin.set_fact:
+        homeassistant_configuration: "{{ retrieved_key.data.Value | from_json }}"
+      tags:
+        - homeassistant
+        - configuration
+
+    - debug:
+        var: homeassistant_configuration
+      tags:
+        - homeassistant
+        - configuration
 
     ####### HOMEASSISTANT NETWORK SECTION
 
@@ -328,6 +404,33 @@
         homeassistant_volume: homeassistant-volume
       tags:
         - homeassistant
+
+    - name: Set Home Assistant Configuration facts
+      ansible.builtin.set_fact:
+        homeassistant_configuration_name: Home
+        homeassistant_configuration_latitude: 51.056145
+        homeassistant_configuration_longitude: 2.736947
+        homeassistant_configuration_elevation: 45
+        homeassistant_configuration_unit_system: metric
+        homeassistant_configuration_time_zone: Europe/London
+        homeassistant_configuration_currency: GBP
+      tags:
+        - homeassistant
+
+    - name: Retrieve Home Assistant Configuration from the key/value store
+      community.general.consul_kv:
+        key: homeassistant/config
+      register: retrieved_configuration
+      tags:
+        - homeassistant
+        - configuration
+
+    - name: Config dict
+      ansible.builtin.set_fact:
+        homeassistant_configuration: "{{ retrieved_configuration.data.Value | from_json }}"
+
+    - debug:
+        var: homeassistant_configuration
 
     - name: Set Home Assistant Configuration facts
       ansible.builtin.set_fact:
