@@ -7,6 +7,15 @@
 
   pre_tasks:
 
+    - name: Ensure Python 3 is being used
+      ansible.builtin.assert:
+        that:
+          - python_requirements.python_version_info.major == 3
+        fail_msg: "Python 3 is required"
+        success_msg: "Python 3 found"
+      tags:
+        - always
+
     - name: Check for dependent python modules
       community.general.python_requirements_info:
         dependencies:
@@ -16,11 +25,11 @@
       tags:
         - always
 
-    - name: Ensure required python modules are present
-      ansible.builtin.assert:
-        that:
-          - python_requirements.not_found | length == 0
-        fail_msg: "Python modules not found"
+    - name: Install any required python modules
+      ansible.builtin.pip:
+        name: "{{ item }}"
+      loop: "{{ python_requirements.not_found }}"
+      when: python_requirements.not_found | length > 0
       tags:
         - always
 
