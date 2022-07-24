@@ -59,37 +59,6 @@
         - homeassistant
         - configuration
 
-    # Expects the following to be stored in Consul
-    # as key homeassistant/config
-    # {
-    #   "name": "Home",
-    #   "latitude": 51.056145,
-    #   "longitude": 2.736947,
-    #   "elevation": 45,
-    #   "unit_system": "metric",
-    #   "time_zone": "Europe/London",
-    #   "currency": "GBP"
-    # }
-
-    # - name: Add or update Home Assistant configuration in the key/value store
-    #   community.general.consul_kv:
-    #     host: "{{ homeassistant_consul_host }}"
-    #     key: "homeassistant/{{ item.key }}"
-    #     value: "{{ item.value }}"
-    #   with_items:
-    #     - {key: name, value: Home}
-    #     - {key: latitude, value: 51.056145}
-    #     - {key: longitude, value: 2.736947}
-    #     - {key: elevation, value: 45}
-    #     - {key: unit_system, value: metric}
-    #     - {key: time_zone, value: Europe/London}
-    #     - {key: currency, value: GBP}
-    #   tags:
-    #     - homeassistant
-    #     - configuration
-
-
-
     ####### HOMEASSISTANT NETWORK SECTION
 
     # Based on
