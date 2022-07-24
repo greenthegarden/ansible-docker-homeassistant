@@ -476,6 +476,9 @@
               MYSQL_DATABASE: "{{ homeassistant_db_mysql_database | default('homeassistant') }}"
               MYSQL_USER: "{{ homeassistant_db_mysql_user | default('homeassistant') }}"
               MYSQL_PASSWORD: "{{ homeassistant_db_mysql_password | default('homeassistant') }}"
+              PUID: "{{ ansible_user_uid | to_string | default('1000') }}"
+              PGID: "{{ ansible_user_gid | to_string | default('1000') }}"
+              TZ: "{{ ansible_date_time.tz }}"
             networks_cli_compatible: true
             networks:
               - name: "{{ homeassistant_network_name }}"
